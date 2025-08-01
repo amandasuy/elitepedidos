@@ -14,7 +14,9 @@ import {
   EyeOff,
   MapPin,
   Hash,
-  User
+  User,
+  ShoppingCart,
+  Clock
 } from 'lucide-react';
 import { RestaurantTable, TableSale, TableCartItem } from '../../types/table-sales';
 
@@ -32,6 +34,8 @@ const TableSalesPanel: React.FC<TableSalesPanelProps> = ({ storeId, operatorName
   const [isCreating, setIsCreating] = useState(false);
   const [saving, setSaving] = useState(false);
   const [supabaseConfigured, setSupabaseConfigured] = useState(true);
+  const [selectedTable, setSelectedTable] = useState<RestaurantTable | null>(null);
+  const [showSaleModal, setShowSaleModal] = useState(false);
 
   // Check Supabase configuration
   useEffect(() => {
@@ -206,13 +210,14 @@ const TableSalesPanel: React.FC<TableSalesPanelProps> = ({ storeId, operatorName
   };
 
   const handleCreate = () => {
+    const nextNumber = Math.max(...tables.map(t => t.number), 0) + 1;
     setEditingTable({
       id: '',
-      number: Math.max(...tables.map(t => t.number), 0) + 1,
-      name: '',
+      number: nextNumber,
+      name: `Mesa ${nextNumber}`,
       capacity: 4,
       status: 'livre',
-      location: '',
+      location: 'Área Principal',
       is_active: true,
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString()
@@ -291,6 +296,37 @@ const TableSalesPanel: React.FC<TableSalesPanelProps> = ({ storeId, operatorName
     } catch (error) {
       console.error('Erro ao alterar status:', error);
       alert('Erro ao alterar status');
+    }
+  };
+
+  const handleOpenTable = (table: RestaurantTable) => {
+    console.log(`🍽️ Abrindo mesa ${table.number} da Loja ${storeId}`);
+    setSelectedTable(table);
+    setShowSaleModal(true);
+  };
+
+  const handleTableAction = (table: RestaurantTable) => {
+    switch (table.status) {
+      case 'livre':
+        handleOpenTable(table);
+        break;
+      case 'ocupada':
+        // Ver pedido ativo
+        console.log(`👀 Visualizando pedido da mesa ${table.number}`);
+        alert(`Funcionalidade "Ver Pedido" será implementada em breve.\n\nMesa ${table.number} está ocupada.`);
+        break;
+      case 'aguardando_conta':
+        // Fechar conta
+        console.log(`💰 Fechando conta da mesa ${table.number}`);
+        alert(`Funcionalidade "Fechar Conta" será implementada em breve.\n\nMesa ${table.number} aguardando fechamento.`);
+        break;
+      case 'limpeza':
+        // Marcar como limpa
+        console.log(`🧹 Marcando mesa ${table.number} como limpa`);
+        updateTable(table.id, { status: 'livre' });
+        break;
+      default:
+        console.log(`❓ Status desconhecido para mesa ${table.number}: ${table.status}`);
     }
   };
 
@@ -427,18 +463,21 @@ const TableSalesPanel: React.FC<TableSalesPanelProps> = ({ storeId, operatorName
 
             <div className="mt-4 pt-4 border-t border-gray-200">
               <button
+                onClick={() => handleTableAction(table)}
                 className={`w-full py-2 px-4 rounded-lg font-medium transition-colors ${
                   table.status === 'livre'
                     ? 'bg-green-500 hover:bg-green-600 text-white'
                     : table.status === 'ocupada'
                     ? 'bg-yellow-500 hover:bg-yellow-600 text-white'
-                    : 'bg-gray-500 hover:bg-gray-600 text-white'
+                    : table.status === 'aguardando_conta'
+                    ? 'bg-orange-500 hover:bg-orange-600 text-white'
+                    : 'bg-blue-500 hover:bg-blue-600 text-white'
                 }`}
               >
                 {table.status === 'livre' ? 'Abrir Mesa' :
                  table.status === 'ocupada' ? 'Ver Pedido' :
                  table.status === 'aguardando_conta' ? 'Fechar Conta' :
-                 'Limpar Mesa'}
+                 'Marcar como Limpa'}
               </button>
             </div>
           </div>
@@ -460,6 +499,153 @@ const TableSalesPanel: React.FC<TableSalesPanelProps> = ({ storeId, operatorName
           >
             Gerenciar Mesas
           </button>
+        </div>
+      )}
+
+      {/* Table Sale Modal */}
+      {showSaleModal && selectedTable && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl w-full max-w-2xl max-h-[90vh] flex flex-col shadow-2xl">
+            {/* Modal Header */}
+            <div className="p-6 border-b border-gray-200 flex-shrink-0">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h2 className="text-xl font-semibold text-gray-800 flex items-center gap-2">
+                    <ShoppingCart size={24} className="text-green-600" />
+                    Mesa {selectedTable.number} - Nova Venda
+                  </h2>
+                  <p className="text-gray-600 text-sm mt-1">
+                    Loja {storeId} • Capacidade: {selectedTable.capacity} pessoas
+                  </p>
+                </div>
+                <button
+                  onClick={() => {
+                    setShowSaleModal(false);
+                    setSelectedTable(null);
+                  }}
+                  className="p-2 hover:bg-gray-100 rounded-full transition-colors"
+                >
+                  <X size={20} />
+                </button>
+              </div>
+            </div>
+
+            {/* Modal Content */}
+            <div className="flex-1 overflow-y-auto p-6">
+              <div className="space-y-6">
+                {/* Customer Info */}
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                  <h3 className="font-medium text-blue-800 mb-3 flex items-center gap-2">
+                    <User size={18} />
+                    Informações do Cliente (Opcional)
+                  </h3>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Nome do Cliente
+                      </label>
+                      <input
+                        type="text"
+                        className="w-full p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        placeholder="Nome (opcional)"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Número de Pessoas
+                      </label>
+                      <input
+                        type="number"
+                        min="1"
+                        max={selectedTable.capacity}
+                        defaultValue="1"
+                        className="w-full p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        placeholder="1"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Quick Actions */}
+                <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+                  <h3 className="font-medium text-green-800 mb-3">Ações Rápidas</h3>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    <button
+                      onClick={() => {
+                        // Abrir mesa sem pedido específico
+                        updateTable(selectedTable.id, { 
+                          status: 'ocupada',
+                          current_sale_id: undefined 
+                        });
+                        setShowSaleModal(false);
+                        setSelectedTable(null);
+                        
+                        // Feedback de sucesso
+                        const successMessage = document.createElement('div');
+                        successMessage.className = 'fixed top-4 right-4 bg-green-500 text-white px-4 py-2 rounded-lg shadow-lg z-50 flex items-center gap-2';
+                        successMessage.innerHTML = `
+                          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+                          </svg>
+                          Mesa ${selectedTable.number} aberta com sucesso!
+                        `;
+                        document.body.appendChild(successMessage);
+                        
+                        setTimeout(() => {
+                          if (document.body.contains(successMessage)) {
+                            document.body.removeChild(successMessage);
+                          }
+                        }, 3000);
+                      }}
+                      className="bg-green-500 hover:bg-green-600 text-white py-3 px-4 rounded-lg font-medium transition-colors flex items-center justify-center gap-2"
+                    >
+                      <Clock size={18} />
+                      Apenas Abrir Mesa
+                    </button>
+                    
+                    <button
+                      onClick={() => {
+                        alert('Funcionalidade "Iniciar Pedido" será implementada em breve.\n\nPor enquanto, use "Apenas Abrir Mesa" para marcar a mesa como ocupada.');
+                      }}
+                      className="bg-blue-500 hover:bg-blue-600 text-white py-3 px-4 rounded-lg font-medium transition-colors flex items-center justify-center gap-2"
+                    >
+                      <ShoppingCart size={18} />
+                      Iniciar Pedido
+                    </button>
+                  </div>
+                </div>
+
+                {/* Info */}
+                <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
+                  <div className="flex items-start gap-3">
+                    <AlertCircle size={20} className="text-gray-600 mt-0.5" />
+                    <div>
+                      <h4 className="font-medium text-gray-800 mb-2">ℹ️ Sobre o Sistema de Mesas</h4>
+                      <ul className="text-sm text-gray-700 space-y-1">
+                        <li>• <strong>Abrir Mesa:</strong> Marca a mesa como ocupada</li>
+                        <li>• <strong>Iniciar Pedido:</strong> Cria uma venda específica para a mesa</li>
+                        <li>• <strong>Status automático:</strong> Atualizado conforme as ações</li>
+                        <li>• <strong>Histórico preservado:</strong> Vendas antigas são mantidas</li>
+                      </ul>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Modal Footer */}
+            <div className="p-6 border-t border-gray-200 flex justify-end">
+              <button
+                onClick={() => {
+                  setShowSaleModal(false);
+                  setSelectedTable(null);
+                }}
+                className="px-4 py-2 text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors"
+              >
+                Cancelar
+              </button>
+            </div>
+          </div>
         </div>
       )}
 
@@ -638,7 +824,7 @@ const TableSalesPanel: React.FC<TableSalesPanelProps> = ({ storeId, operatorName
                           name: e.target.value
                         })}
                         className="w-full p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                        placeholder="Ex: Mesa 1"
+                        placeholder="Ex: Mesa VIP, Mesa da Janela"
                       />
                     </div>
 
@@ -672,7 +858,7 @@ const TableSalesPanel: React.FC<TableSalesPanelProps> = ({ storeId, operatorName
                           location: e.target.value
                         })}
                         className="w-full p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                        placeholder="Ex: Área Principal, Varanda, etc."
+                        placeholder="Ex: Área Principal, Varanda, Terraço"
                       />
                     </div>
 
