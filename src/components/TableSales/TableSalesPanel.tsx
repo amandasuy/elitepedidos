@@ -184,22 +184,24 @@ const TableSalesPanel: React.FC<TableSalesPanelProps> = ({ storeId, operatorName
         return;
       }
 
-      console.log(`🗑️ Excluindo mesa ${id} da Loja ${storeId}`);
+      console.log(`🔒 Desativando mesa ${id} da Loja ${storeId}`);
       
       const tableName = storeId === 1 ? 'store1_tables' : 'store2_tables';
       
       const { error } = await supabase
         .from(tableName)
-        .delete()
+        .update({ is_active: false })
         .eq('id', id);
 
       if (error) throw error;
       
-      setTables(prev => prev.filter(table => table.id !== id));
-      console.log(`✅ Mesa excluída da Loja ${storeId}`);
+      setTables(prev => prev.map(table => 
+        table.id === id ? { ...table, is_active: false } : table
+      ));
+      console.log(`✅ Mesa desativada da Loja ${storeId}`);
     } catch (err) {
-      console.error(`❌ Erro ao excluir mesa da Loja ${storeId}:`, err);
-      throw new Error(err instanceof Error ? err.message : 'Erro ao excluir mesa');
+      console.error(`❌ Erro ao desativar mesa da Loja ${storeId}:`, err);
+      throw new Error(err instanceof Error ? err.message : 'Erro ao desativar mesa');
     }
   };
 
@@ -273,12 +275,12 @@ const TableSalesPanel: React.FC<TableSalesPanelProps> = ({ storeId, operatorName
   };
 
   const handleDelete = async (id: string, name: string) => {
-    if (confirm(`Tem certeza que deseja excluir a mesa "${name}"?`)) {
+    if (confirm(`Tem certeza que deseja desativar a mesa "${name}"?\n\nA mesa será removida da lista ativa, mas os dados de vendas serão preservados.`)) {
       try {
         await deleteTable(id);
       } catch (error) {
-        console.error('Erro ao excluir mesa:', error);
-        alert('Erro ao excluir mesa');
+        console.error('Erro ao desativar mesa:', error);
+        alert('Erro ao desativar mesa');
       }
     }
   };
@@ -585,7 +587,7 @@ const TableSalesPanel: React.FC<TableSalesPanelProps> = ({ storeId, operatorName
                                 <button
                                   onClick={() => handleDelete(table.id, table.name)}
                                   className="p-2 text-red-600 hover:bg-red-100 rounded-lg transition-colors"
-                                  title="Excluir mesa"
+                                  title="Desativar mesa"
                                 >
                                   <Trash2 size={16} />
                                 </button>
