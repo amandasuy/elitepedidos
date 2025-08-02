@@ -15,7 +15,7 @@ import {
 } from 'lucide-react';
 import AttendantPanel from './Orders/AttendantPanel'; 
 import PDVSalesScreen from './PDV/PDVSalesScreen';
-import CashRegisterMenu from './PDV/CashRegisterMenu';
+import CashRegisterMenu from '../PDV/CashRegisterMenu';
 import TableSalesPanel from './TableSales/TableSalesPanel';
 import SalesHistory from './Orders/SalesHistory';
 import { usePermissions } from '../hooks/usePermissions';
