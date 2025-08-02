@@ -36,6 +36,9 @@ const TableSalesPanel: React.FC<TableSalesPanelProps> = ({ storeId, operatorName
   const [supabaseConfigured, setSupabaseConfigured] = useState(true);
   const [selectedTable, setSelectedTable] = useState<RestaurantTable | null>(null);
   const [showSaleModal, setShowSaleModal] = useState(false);
+  const [showOrderModal, setShowOrderModal] = useState(false);
+  const [currentTableSale, setCurrentTableSale] = useState<TableSale | null>(null);
+  const [loadingOrder, setLoadingOrder] = useState(false);
 
   // Check Supabase configuration
   useEffect(() => {
@@ -299,6 +302,197 @@ const TableSalesPanel: React.FC<TableSalesPanelProps> = ({ storeId, operatorName
     }
   };
 
+  const handleViewOrder = async (table: RestaurantTable) => {
+    try {
+      setLoadingOrder(true);
+      console.log(`👀 Carregando pedido da mesa ${table.number}`);
+      
+      if (!supabaseConfigured) {
+        // Dados de demonstração
+        const demoSale: TableSale = {
+          id: 'demo-sale-1',
+          table_id: table.id,
+          sale_number: 1001,
+          operator_name: operatorName || 'Operador',
+          customer_name: 'Cliente Mesa ' + table.number,
+          customer_count: 2,
+          subtotal: 45.90,
+          discount_amount: 0,
+          total_amount: 45.90,
+          payment_type: undefined,
+          change_amount: 0,
+          status: 'aberta',
+          notes: '',
+          opened_at: new Date().toISOString(),
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+          items: [
+            {
+              id: 'demo-item-1',
+              sale_id: 'demo-sale-1',
+              product_code: 'ACAI500',
+              product_name: 'Açaí 500ml',
+              quantity: 2,
+              unit_price: 22.95,
+              subtotal: 45.90,
+              created_at: new Date().toISOString()
+            }
+          ]
+        };
+        
+        setCurrentTableSale(demoSale);
+        setSelectedTable(table);
+        setShowOrderModal(true);
+        setLoadingOrder(false);
+        return;
+      }
+      
+      const tableName = storeId === 1 ? 'store1_table_sales' : 'store2_table_sales';
+      const itemsTableName = storeId === 1 ? 'store1_table_sale_items' : 'store2_table_sale_items';
+      
+      // Buscar venda ativa da mesa
+      const { data: saleData, error: saleError } = await supabase
+        .from(tableName)
+        .select(`
+          *,
+          ${itemsTableName}(*)
+        `)
+        .eq('table_id', table.id)
+        .eq('status', 'aberta')
+        .order('opened_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      
+      if (saleError) {
+        console.error('Erro ao buscar venda da mesa:', saleError);
+        throw saleError;
+      }
+      
+      if (!saleData) {
+        alert(`Nenhuma venda ativa encontrada para a Mesa ${table.number}.\n\nA mesa pode estar ocupada mas sem pedido registrado no sistema.`);
+        setLoadingOrder(false);
+        return;
+      }
+      
+      console.log('✅ Venda da mesa carregada:', saleData);
+      
+      // Processar dados da venda
+      const tableSale: TableSale = {
+        ...saleData,
+        items: saleData[itemsTableName] || []
+      };
+      
+      setCurrentTableSale(tableSale);
+      setSelectedTable(table);
+      setShowOrderModal(true);
+      
+    } catch (error) {
+      console.error('Erro ao carregar pedido da mesa:', error);
+      alert('Erro ao carregar pedido da mesa. Tente novamente.');
+    } finally {
+      setLoadingOrder(false);
+    }
+  };
+  
+  const handleCloseAccount = async (table: RestaurantTable) => {
+    try {
+      console.log(`💰 Fechando conta da mesa ${table.number}`);
+      
+      if (!supabaseConfigured) {
+        // Simular fechamento
+        await updateTable(table.id, { status: 'limpeza' });
+        alert(`Conta da Mesa ${table.number} fechada com sucesso!\n\nMesa marcada para limpeza.`);
+        return;
+      }
+      
+      const tableName = storeId === 1 ? 'store1_table_sales' : 'store2_table_sales';
+      
+      // Buscar venda ativa
+      const { data: saleData, error: saleError } = await supabase
+        .from(tableName)
+        .select('*')
+        .eq('table_id', table.id)
+        .eq('status', 'aberta')
+        .maybeSingle();
+      
+      if (saleError) throw saleError;
+      
+      if (!saleData) {
+        alert(`Nenhuma venda ativa encontrada para a Mesa ${table.number}.`);
+        return;
+      }
+      
+      // Confirmar fechamento
+      const confirmed = confirm(`Fechar conta da Mesa ${table.number}?\n\nTotal: R$ ${saleData.total_amount.toFixed(2)}\n\nEsta ação não pode ser desfeita.`);
+      
+      if (!confirmed) return;
+      
+      // Fechar venda
+      const { error: closeError } = await supabase
+        .from(tableName)
+        .update({
+          status: 'fechada',
+          closed_at: new Date().toISOString()
+        })
+        .eq('id', saleData.id);
+      
+      if (closeError) throw closeError;
+      
+      // Atualizar status da mesa
+      await updateTable(table.id, { 
+        status: 'limpeza',
+        current_sale_id: undefined
+      });
+      
+      // Feedback de sucesso
+      const successMessage = document.createElement('div');
+      successMessage.className = 'fixed top-4 right-4 bg-green-500 text-white px-4 py-2 rounded-lg shadow-lg z-50 flex items-center gap-2';
+      successMessage.innerHTML = `
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+        </svg>
+        Conta da Mesa ${table.number} fechada com sucesso!
+      `;
+      document.body.appendChild(successMessage);
+      
+      setTimeout(() => {
+        if (document.body.contains(successMessage)) {
+          document.body.removeChild(successMessage);
+        }
+      }, 3000);
+      
+    } catch (error) {
+      console.error('Erro ao fechar conta:', error);
+      alert('Erro ao fechar conta. Tente novamente.');
+    }
+  };
+
+  const formatPrice = (price: number) => {
+    return new Intl.NumberFormat('pt-BR', {
+      style: 'currency',
+      currency: 'BRL'
+    }).format(price);
+  };
+
+  const formatDateTime = (dateString: string) => {
+    return new Date(dateString).toLocaleString('pt-BR');
+  };
+
+  const getPaymentMethodLabel = (method?: string) => {
+    if (!method) return 'Não definido';
+    
+    const methods: Record<string, string> = {
+      'dinheiro': 'Dinheiro',
+      'pix': 'PIX',
+      'cartao_credito': 'Cartão de Crédito',
+      'cartao_debito': 'Cartão de Débito',
+      'voucher': 'Voucher',
+      'misto': 'Pagamento Misto'
+    };
+    
+    return methods[method] || method;
+  };
+
   const handleOpenTable = (table: RestaurantTable) => {
     console.log(`🍽️ Abrindo mesa ${table.number} da Loja ${storeId}`);
     setSelectedTable(table);
@@ -312,13 +506,11 @@ const TableSalesPanel: React.FC<TableSalesPanelProps> = ({ storeId, operatorName
         break;
       case 'ocupada':
         // Ver pedido ativo
-        console.log(`👀 Visualizando pedido da mesa ${table.number}`);
-        alert(`Funcionalidade "Ver Pedido" será implementada em breve.\n\nMesa ${table.number} está ocupada.`);
+        handleViewOrder(table);
         break;
       case 'aguardando_conta':
         // Fechar conta
-        console.log(`💰 Fechando conta da mesa ${table.number}`);
-        alert(`Funcionalidade "Fechar Conta" será implementada em breve.\n\nMesa ${table.number} aguardando fechamento.`);
+        handleCloseAccount(table);
         break;
       case 'limpeza':
         // Marcar como limpa
